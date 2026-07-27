@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+@layer base {
+  html, body {
+    background-color: #0d0d0d;
+    color: #e2e8f0;
+    font-family: 'Be Vietnam Pro', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Single uniform font rule across inputs, buttons, headings, and select dropdowns */
+  input, button, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div {
+    font-family: 'Be Vietnam Pro', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+/* Custom Immersive UI Glows & Glassmorphism Utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-gold {
+  background: rgba(180, 134, 72, 0.06);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(180, 134, 72, 0.2);
+}
+
+.gold-gradient-text {
+  background: linear-gradient(135deg, #e6c28f 0%, #b48648 50%, #8a6331 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-btn-shadow {
+  box-shadow: 0 0 20px rgba(180, 134, 72, 0.35);
+}
+
+@layer utilities {
+  /* Slide-in for toast notification */
+  @keyframes slide-in-right {
+    from { transform: translateX(24px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
+  .animate-slide-in-right {
+    animation: slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+  }
+}
+
+/* Print: only the .print-area block is printed. Everything else is hidden.
+   The body/modal chrome is excluded so the browser never prints the surrounding
+   app shell, the toolbar, or the backdrop. Use this for picking the receipt
+   card inside a modal. */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .print-area {
+    position: absolute !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .print-no-show,
+  .print\:hidden {
+    display: none !important;
+  }
+}

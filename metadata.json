@@ -1,0 +1,6 @@
+{
+  "name": "Trung Tâm Âm Nhạc Hiếu Vũ - ALLEGRO",
+  "description": "Hệ thống quản lý học viên, giáo viên, khóa học, thời khóa biểu, điểm danh, học phí và biên lai điện tử tích hợp xác minh tính vẹn toàn cho Trung Tâm Âm Nhạc Hiếu Vũ.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
