@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useRef } from 'react';
 import { Student, StudentStatus } from '../types';
-import { getClassGroups, getStudents, saveStudent, checkClassCapacity, validateStudentClassEnrollment } from '../lib/storage';
+import { getClassGroups, getStudents, saveStudent, checkClassCapacity } from '../lib/storage';
 import { useToast } from './Toast';
 import { X, UserPlus, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -36,6 +36,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const toast = useToast();
 
+  // Stable ID generated once for new students
+  const stableIdRef = useRef(studentToEdit?.id || `std_${Date.now()}`);
+
   const toggleClass = (classId: string) => {
     if (selectedClassIds.includes(classId)) {
       setSelectedClassIds(selectedClassIds.filter((id) => id !== classId));
@@ -56,7 +59,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     }
 
     const studentData: Student = {
-      id: studentToEdit ? studentToEdit.id : `std_${Date.now()}`,
+      id: stableIdRef.current,
       code,
       fullName: fullName.trim(),
       gender,

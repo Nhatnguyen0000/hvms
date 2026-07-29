@@ -346,26 +346,31 @@ export function buildShiftFromSession(
 /**
  * Build the full list of shift cards for a given calendar date.
  *
- * Data source priority (each step falls back to the next when empty):
- *  1. **ScheduleEntry rows from TKB** — what the operator manually
- *     assigned to a (day, slot, instrument) shift in ScheduleView. This
- *     is the source of truth when the operator has set up the weekly
- *     roster directly per shift.
- *  2. **3 fixed class groups (Piano / Organ / Guitar)** — used as a
- *     gentle fallback when no TKB shift exists for that triple. The
- *     roster of a class is the union of all students enrolled in it.
+ * **Architecture (post-bugfix):**
  *
- * The two sources are merged by shift key (day + slot + instrument).
- * A TKB-driven shift wins over a class-driven one because it represents
- * a more specific intent (e.g. "Piano 19h on Tuesday only has these 3
- * HV, not all 12 enrolled in the Piano class").
+ * The TKB (ScheduleEntry) is the **single source of truth** for who is
+ * assigned to each shift. Class-group enrollment (`student.enrolledClassIds`)
+ * is used ONLY for billing/tuition and does NOT influence shift rosters.
+ *
+ * Steps:
+ *  1. Build **empty shift frames** from the 3 fixed class groups' weekly
+ *     `classSessions` for the given day. These frames have `studentIds: []`.
+ *  2. Overlay any **TKB entries** for the same (day, slot, instrument).
+ *     TKB entries carry the real roster — only students explicitly assigned
+ *     by the operator in ScheduleView will appear.
+ *  3. The merged result means: every class session for the day is rendered
+ *     as a card, but only those with TKB data will show students.
+ *
+ * This eliminates the previous bug where enrolling a student in a class
+ * group caused them to appear on ALL days/slots of that class instead of
+ * only the specific shift they were assigned to.
  *
  * Returns an empty array if the date is not a working day (T7/CN).
  */
 export function buildShiftsForDate(
   dateStr: string,
   classes: ClassGroup[],
-  students: Student[],
+  _students: Student[],
   scheduleEntries?: ScheduleEntry[]
 ): ScheduleEntry[] {
   const date = parseDateString(dateStr);
@@ -376,7 +381,7 @@ export function buildShiftsForDate(
   const tkbByKey = new Map<string, ScheduleEntry>();
   if (scheduleEntries && scheduleEntries.length > 0) {
     for (const entry of scheduleEntries) {
-      if (entry.dayOfWeek !== vn) continue;
+      if (!entry.dayOfWeek || entry.dayOfWeek.trim() !== vn.trim()) continue;
       const key = buildShiftKey(entry.dayOfWeek, entry.timeSlot, entry.instrument);
       const existing = tkbByKey.get(key);
       // Prefer the entry with the most students (most recent history).
@@ -386,26 +391,26 @@ export function buildShiftsForDate(
     }
   }
 
-  // Build class-driven shifts as fallback with empty roster for unassigned shifts.
+  // Build empty shift frames from class sessions — NO roster (studentIds: []).
+  // These serve as placeholders so the UI renders all expected shift cards
+  // for the day even before any student is assigned via TKB.
   const fixedIds = ['cls_piano', 'cls_organ', 'cls_guitar'];
   const fixedClasses = classes.filter((c) => fixedIds.includes(c.id));
 
-  const classByKey = new Map<string, ScheduleEntry>();
+  const frameByKey = new Map<string, ScheduleEntry>();
   for (const cls of fixedClasses) {
     const sessions = getClassSessions(cls).filter((s) => s.dayOfWeek === vn);
-    const enrolledIds = students
-      .filter((s) => s.enrolledClassIds.includes(cls.id))
-      .map((s) => s.id);
     for (const session of sessions) {
-      const shift = buildShiftFromSession(cls, session, enrolledIds);
+      // Empty roster — class enrollment does NOT auto-populate shifts.
+      const shift = buildShiftFromSession(cls, session, []);
       const key = buildShiftKey(shift.dayOfWeek, shift.timeSlot, shift.instrument);
-      classByKey.set(key, shift);
+      frameByKey.set(key, shift);
     }
   }
 
-  // Merge: TKB entries win; class entries fill the gaps.
+  // Merge: TKB entries (with real roster) override empty frames.
   const merged = new Map<string, ScheduleEntry>();
-  for (const [key, shift] of classByKey.entries()) merged.set(key, shift);
+  for (const [key, shift] of frameByKey.entries()) merged.set(key, shift);
   for (const [key, shift] of tkbByKey.entries()) merged.set(key, shift);
 
   return Array.from(merged.values()).sort((a, b) => {

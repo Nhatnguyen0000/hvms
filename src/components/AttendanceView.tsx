@@ -135,9 +135,8 @@ export const AttendanceView: React.FC = () => {
       !activeShift ||
       !shiftsForDate.some(
         (s) =>
-          s.dayOfWeek === activeShift.day &&
-          s.timeSlot === activeShift.slot &&
-          s.instrument === activeShift.instrument
+          buildShiftKey(s.dayOfWeek, s.timeSlot, s.instrument) ===
+          buildShiftKey(activeShift.day, activeShift.slot, activeShift.instrument)
       )
     ) {
       const first = shiftsForDate[0];
@@ -149,11 +148,9 @@ export const AttendanceView: React.FC = () => {
    *  resolved from the class group. */
   const activeShiftEntry = useMemo(() => {
     if (!activeShift) return undefined;
+    const targetKey = buildShiftKey(activeShift.day, activeShift.slot, activeShift.instrument);
     return shiftsForDate.find(
-      (s) =>
-        s.dayOfWeek === activeShift.day &&
-        s.timeSlot === activeShift.slot &&
-        s.instrument === activeShift.instrument
+      (s) => buildShiftKey(s.dayOfWeek, s.timeSlot, s.instrument) === targetKey
     );
   }, [activeShift, shiftsForDate]);
 
@@ -484,9 +481,8 @@ export const AttendanceView: React.FC = () => {
             {shiftsForDate.map((shift) => {
               const isActive =
                 activeShift !== null &&
-                shift.dayOfWeek === activeShift.day &&
-                shift.timeSlot === activeShift.slot &&
-                shift.instrument === activeShift.instrument;
+                buildShiftKey(shift.dayOfWeek, shift.timeSlot, shift.instrument) ===
+                  buildShiftKey(activeShift.day, activeShift.slot, activeShift.instrument);
               const displayCount = resolveRoster(shift, allStudents).filter(
                 (s) => s.status === 'Active' || s.status === 'Reserved'
               ).length;

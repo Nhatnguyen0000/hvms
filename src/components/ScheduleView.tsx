@@ -3,7 +3,6 @@ import {
   getScheduleEntries,
   saveScheduleEntry,
   getStudents,
-  saveStudent,
   getTeachers,
   subscribeDataChange,
   STORAGE_KEYS_INTERNAL,
@@ -34,8 +33,8 @@ import { useToast, useConfirm } from './Toast';
 
 export const ScheduleView: React.FC = () => {
   const [schedule, setSchedule] = useState<ScheduleEntry[]>(getScheduleEntries());
-  const [students] = useState<Student[]>(getStudents());
-  const [teachers] = useState<Teacher[]>(getTeachers());
+  const [students, setStudents] = useState<Student[]>(getStudents());
+  const [teachers, setTeachers] = useState<Teacher[]>(getTeachers());
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -53,6 +52,8 @@ export const ScheduleView: React.FC = () => {
 
   const refreshData = useCallback(() => {
     setSchedule(getScheduleEntries());
+    setStudents(getStudents());
+    setTeachers(getTeachers());
   }, []);
 
   // Subscribe to schedule + student changes so the view always reflects
@@ -78,8 +79,9 @@ export const ScheduleView: React.FC = () => {
    */
   const getEntry = useCallback(
     (day: string, slot: string, instrument: Instrument): ScheduleEntry => {
+      const canonicalKey = buildShiftKey(day, slot, instrument);
       const found = schedule.find(
-        (e) => e.dayOfWeek === day && e.timeSlot === slot && e.instrument === instrument
+        (e) => buildShiftKey(e.dayOfWeek, e.timeSlot, e.instrument) === canonicalKey
       );
       if (found) return found;
       return makeEmptyShift(day, slot, instrument, 'tch_hieuvu');
@@ -105,22 +107,17 @@ export const ScheduleView: React.FC = () => {
 
     const updated: ScheduleEntry = {
       ...current,
+      id: buildShiftKey(editingSlot.day, editingSlot.slot, editingSlot.instrument),
+      dayOfWeek: editingSlot.day,
+      timeSlot: editingSlot.slot,
+      instrument: editingSlot.instrument,
       studentIds: [...current.studentIds, studentId],
       teacherId: selectedTeacherId || current.teacherId,
     };
 
     await saveScheduleEntry(updated);
 
-    // Auto-enroll in the corresponding course class group if not already enrolled
-    const classId = editingSlot.instrument === 'Piano' ? 'cls_piano' : editingSlot.instrument === 'Organ' ? 'cls_organ' : 'cls_guitar';
     const st = students.find((s) => s.id === studentId);
-    if (st && (!st.enrolledClassIds || !st.enrolledClassIds.includes(classId))) {
-      await saveStudent({
-        ...st,
-        enrolledClassIds: [...(st.enrolledClassIds || []), classId],
-      });
-    }
-
     refreshData();
     toast.success(`Đã thêm ${st?.fullName || 'học viên'} vào ${editingSlot.day} ca ${editingSlot.slot} · ${editingSlot.instrument}.`);
   };
@@ -140,6 +137,10 @@ export const ScheduleView: React.FC = () => {
 
     const updated: ScheduleEntry = {
       ...current,
+      id: buildShiftKey(editingSlot.day, editingSlot.slot, editingSlot.instrument),
+      dayOfWeek: editingSlot.day,
+      timeSlot: editingSlot.slot,
+      instrument: editingSlot.instrument,
       studentIds: current.studentIds.filter((id) => id !== studentId),
     };
 
@@ -155,6 +156,10 @@ export const ScheduleView: React.FC = () => {
     const current = getEntry(editingSlot.day, editingSlot.slot, editingSlot.instrument);
     const updated: ScheduleEntry = {
       ...current,
+      id: buildShiftKey(editingSlot.day, editingSlot.slot, editingSlot.instrument),
+      dayOfWeek: editingSlot.day,
+      timeSlot: editingSlot.slot,
+      instrument: editingSlot.instrument,
       teacherId,
     };
 

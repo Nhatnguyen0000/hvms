@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import jsQR from 'jsqr';
 import { Student } from '../types';
 import { getStudents } from '../lib/storage';
-import { QrCode, Camera, Keyboard, X, CheckCircle2, Sparkles, RefreshCcw, ZapIcon } from 'lucide-react';
+import { QrCode, Camera, X, CheckCircle2, RefreshCcw } from 'lucide-react';
 
 interface QRScannerModalProps {
   onClose: () => void;
@@ -11,11 +11,7 @@ interface QRScannerModalProps {
 
 export const QRScannerModal: React.FC<QRScannerModalProps> = ({ onClose, onScanStudent }) => {
   const [students] = useState<Student[]>(() => getStudents());
-  // Default to camera tab so scanning starts immediately
-  const [activeTab, setActiveTab] = useState<'camera' | 'usb' | 'quick'>('camera');
 
-  const [manualCode, setManualCode] = useState('');
-  const [selectedStudentId, setSelectedStudentId] = useState<string>(students[0]?.id || '');
   const [lastScannedMsg, setLastScannedMsg] = useState<string | null>(null);
   const [lastScannedSuccess, setLastScannedSuccess] = useState(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -25,9 +21,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ onClose, onScanS
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
-  const usbInputRef = useRef<HTMLInputElement>(null);
   const lastScannedPayloadRef = useRef<string>('');
-  const cooldownRef = useRef<boolean>(false); // prevent double-trigger
+  const cooldownRef = useRef<boolean>(false);
 
   // Audio chime feedback using Web Audio API
   const playBeep = useCallback((success: boolean) => {
@@ -54,7 +49,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ onClose, onScanS
     }
   }, []);
 
-  // Process raw payload or code — works for camera scan, USB scan, and quick mode
+  // Process raw payload — camera scan only
   const processPayload = useCallback((payloadStr: string) => {
     const raw = payloadStr.trim();
     if (!raw) return;
@@ -118,47 +113,33 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ onClose, onScanS
     animFrameRef.current = requestAnimationFrame(scanFrame);
   }, [processPayload]);
 
-  // Start/stop camera based on active tab
+  // Start camera on mount, stop on unmount
   useEffect(() => {
-    if (activeTab === 'camera') {
-      setCameraError(null);
-      setIsScanning(false);
-      navigator.mediaDevices
-        ?.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        })
-        .then((stream) => {
-          mediaStreamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.onloadedmetadata = () => {
-              videoRef.current?.play();
-              setIsScanning(true);
-              animFrameRef.current = requestAnimationFrame(scanFrame);
-            };
-          }
-        })
-        .catch(() => {
-          setCameraError(
-            'Không thể truy cập camera. Vui lòng cấp quyền camera cho trình duyệt, hoặc chuyển sang tab Quét USB.'
-          );
-        });
-    } else {
-      // Stop camera + scanning loop when leaving camera tab
-      if (animFrameRef.current !== null) {
-        cancelAnimationFrame(animFrameRef.current);
-        animFrameRef.current = null;
-      }
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-        mediaStreamRef.current = null;
-      }
-      setIsScanning(false);
-    }
+    setCameraError(null);
+    setIsScanning(false);
+    navigator.mediaDevices
+      ?.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      })
+      .then((stream) => {
+        mediaStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play();
+            setIsScanning(true);
+            animFrameRef.current = requestAnimationFrame(scanFrame);
+          };
+        }
+      })
+      .catch(() => {
+        setCameraError('Không thể truy cập camera. Vui lòng cấp quyền camera cho trình duyệt.');
+      });
+
     return () => {
       if (animFrameRef.current !== null) {
         cancelAnimationFrame(animFrameRef.current);
@@ -169,45 +150,37 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ onClose, onScanS
         mediaStreamRef.current = null;
       }
     };
-  }, [activeTab, scanFrame]);
-
-  // Focus USB input when switching to USB tab
-  useEffect(() => {
-    if (activeTab === 'usb' && usbInputRef.current) {
-      usbInputRef.current.focus();
-    }
-  }, [activeTab]);
-
-  // Handle USB scanner — auto-submit on Enter (which hardware scanners send)
-  const handleUSBKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (manualCode.trim()) {
-        processPayload(manualCode);
-        setManualCode('');
-      }
-    }
-  };
-
-  const handleUSBSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (manualCode.trim()) {
-      processPayload(manualCode);
-      setManualCode('');
-    }
-  };
-
-  const handleQuickSimulate = () => {
-    const student = students.find((s) => s.id === selectedStudentId);
-    if (student) {
-      const payload = `ALLEGRO_STUDENT_V1:${student.id}:${student.code}`;
-      processPayload(payload);
-    }
-  };
+  }, [scanFrame]);
 
   const restartCamera = () => {
-    setActiveTab('quick');
-    setTimeout(() => setActiveTab('camera'), 100);
+    // Stop existing stream
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+    setIsScanning(false);
+    setCameraError(null);
+    // Re-init
+    navigator.mediaDevices
+      ?.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
+      .then((stream) => {
+        mediaStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play();
+            setIsScanning(true);
+            animFrameRef.current = requestAnimationFrame(scanFrame);
+          };
+        }
+      })
+      .catch(() => {
+        setCameraError('Không thể truy cập camera. Vui lòng cấp quyền camera cho trình duyệt.');
+      });
   };
 
   return (
@@ -221,7 +194,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ onClose, onScanS
             </div>
             <div>
               <h3 className="font-extrabold text-base text-white">Quét Mã QR Điểm Danh</h3>
-              <p className="text-xs text-slate-400">Nhận diện học viên & lưu Có Mặt tự động</p>
+              <p className="text-xs text-slate-400">Nhận diện học viên &amp; lưu Có Mặt tự động</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition-colors">
@@ -229,179 +202,68 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ onClose, onScanS
           </button>
         </div>
 
-        {/* Mode Selector Tabs */}
-        <div className="p-4 bg-slate-950/60 border-b border-slate-800 flex gap-2">
-          <button
-            onClick={() => setActiveTab('camera')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
-              activeTab === 'camera'
-                ? 'bg-[#b48648] text-black border-[#b48648]'
-                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-            }`}
-          >
-            <Camera className="w-4 h-4" />
-            <span>Camera QR</span>
-            {activeTab === 'camera' && isScanning && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-1" />
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('usb')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
-              activeTab === 'usb'
-                ? 'bg-[#b48648] text-black border-[#b48648]'
-                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-            }`}
-          >
-            <Keyboard className="w-4 h-4" />
-            <span>Súng Quét USB</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('quick')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
-              activeTab === 'quick'
-                ? 'bg-[#b48648] text-black border-[#b48648]'
-                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Mô Phỏng</span>
-          </button>
-        </div>
-
-        {/* Tab Content */}
+        {/* Camera Content */}
         <div className="p-6 space-y-4">
-
-          {/* Camera Tab — Auto-scan via jsQR */}
-          {activeTab === 'camera' && (
+          {cameraError ? (
             <div className="space-y-3">
-              {cameraError ? (
-                <div className="space-y-3">
-                  <div className="p-4 bg-rose-950/40 border border-rose-500/40 rounded-2xl text-rose-300 text-sm">
-                    {cameraError}
-                  </div>
-                  <button
-                    onClick={restartCamera}
-                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center justify-center gap-2 border border-slate-700"
-                  >
-                    <RefreshCcw className="w-4 h-4" />
-                    Thử lại
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="relative rounded-2xl overflow-hidden border-2 border-amber-500/50 bg-black aspect-video flex items-center justify-center">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                    />
-                    {/* Hidden canvas for QR decoding */}
-                    <canvas ref={canvasRef} className="hidden" />
-
-                    {/* Scanning overlay */}
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                      <div className="w-48 h-48 relative">
-                        {/* Corner brackets */}
-                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-amber-400 rounded-tl-lg" />
-                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-amber-400 rounded-tr-lg" />
-                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-amber-400 rounded-bl-lg" />
-                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-amber-400 rounded-br-lg" />
-                        {/* Scanning line */}
-                        {isScanning && (
-                          <div className="absolute left-2 right-2 h-0.5 bg-amber-400/80 animate-[scan_2s_linear_infinite]" style={{ top: '50%' }} />
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Status badge */}
-                    <div className={`absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                      isScanning ? 'bg-emerald-900/80 text-emerald-300 border border-emerald-500/40' : 'bg-slate-900/80 text-slate-400 border border-slate-700'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${isScanning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                      {isScanning ? 'Đang quét…' : 'Đang khởi động…'}
-                    </div>
-                  </div>
-
-                  <p className="text-center text-xs text-slate-400">
-                    Đưa mã QR thẻ học viên vào khung vàng — hệ thống tự nhận diện và điểm danh ngay
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* USB / Hardware Scanner Input */}
-          {activeTab === 'usb' && (
-            <form onSubmit={handleUSBSubmit} className="space-y-4">
-              <div className="p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl text-xs space-y-1">
-                <div className="font-bold text-indigo-300">Chế độ Súng Quét Mã QR Cầm Tay (USB)</div>
-                <div className="text-slate-300">
-                  Nhấn vào ô nhập liệu bên dưới, sau đó quét thẻ học viên bằng súng USB. Hệ thống tự điểm danh khi nhận mã (Enter).
-                </div>
+              <div className="p-4 bg-rose-950/40 border border-rose-500/40 rounded-2xl text-rose-300 text-sm">
+                {cameraError}
               </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-300 uppercase">Mã QR từ Súng Quét</label>
-                <input
-                  ref={usbInputRef}
-                  type="text"
-                  value={manualCode}
-                  onChange={(e) => setManualCode(e.target.value)}
-                  onKeyDown={handleUSBKeyDown}
-                  placeholder="Quét thẻ hoặc gõ mã học viên (HV001)..."
-                  className="w-full bg-slate-800 border-2 border-amber-500/40 focus:border-[#b48648] rounded-xl px-4 py-3 text-sm font-mono text-amber-300 focus:outline-none transition-colors"
-                  autoFocus
-                />
-              </div>
-
               <button
-                type="submit"
-                className="w-full py-3 rounded-xl bg-[#b48648] hover:bg-amber-600 text-black font-extrabold text-sm shadow-lg shadow-amber-600/20 flex items-center justify-center gap-2 transition-all"
+                onClick={restartCamera}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center justify-center gap-2 border border-slate-700"
               >
-                <CheckCircle2 className="w-5 h-5" />
-                <span>Xác Nhận Điểm Danh</span>
+                <RefreshCcw className="w-4 h-4" />
+                Thử lại
               </button>
-            </form>
-          )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="relative rounded-2xl overflow-hidden border-2 border-amber-500/50 bg-black aspect-video flex items-center justify-center">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                {/* Hidden canvas for QR decoding */}
+                <canvas ref={canvasRef} className="hidden" />
 
-          {/* Quick Simulation Mode */}
-          {activeTab === 'quick' && (
-            <div className="space-y-4">
-              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-xs space-y-1">
-                <div className="font-bold text-amber-300 flex items-center gap-1.5">
-                  <ZapIcon className="w-3.5 h-3.5" /> Mô Phỏng Quét Thẻ Nhanh
+                {/* Scanning overlay */}
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                  <div className="w-48 h-48 relative">
+                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-amber-400 rounded-tl-lg" />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-amber-400 rounded-tr-lg" />
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-amber-400 rounded-bl-lg" />
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-amber-400 rounded-br-lg" />
+                    {isScanning && (
+                      <div className="absolute left-2 right-2 h-0.5 bg-amber-400/80 animate-[scan_2s_linear_infinite]" style={{ top: '50%' }} />
+                    )}
+                  </div>
                 </div>
-                <div className="text-slate-300">
-                  Chọn học viên và nhấn nút để điểm danh ngay — dùng để kiểm tra hoặc điểm danh thủ công khi không có thiết bị quét.
+
+                {/* Status badge */}
+                <div className={`absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                  isScanning
+                    ? 'bg-emerald-900/80 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-slate-900/80 text-slate-400 border border-slate-700'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isScanning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                  {isScanning ? 'Đang quét…' : 'Đang khởi động…'}
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-300 uppercase">Chọn Học Viên</label>
-                <select
-                  value={selectedStudentId}
-                  onChange={(e) => setSelectedStudentId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#b48648]"
-                >
-                  {students.map((s) => (
-                    <option key={s.id} value={s.id} className="bg-slate-800 text-slate-200">
-                      {s.code} — {s.fullName} ({s.status === 'Active' ? 'Đang học' : s.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <p className="text-center text-xs text-slate-400">
+                Đưa mã QR thẻ học viên vào khung vàng — hệ thống tự nhận diện và điểm danh ngay
+              </p>
 
               <button
-                onClick={handleQuickSimulate}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all active:scale-95"
+                onClick={restartCamera}
+                className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center justify-center gap-2 border border-slate-700 transition-colors"
               >
-                <QrCode className="w-5 h-5" />
-                <span>Điểm Danh Ngay</span>
+                <RefreshCcw className="w-3.5 h-3.5" />
+                Khởi động lại camera
               </button>
             </div>
           )}
@@ -423,7 +285,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ onClose, onScanS
         </div>
       </div>
 
-      {/* Scanning line animation keyframe (inline style tag) */}
+      {/* Scanning line animation keyframe */}
       <style>{`
         @keyframes scan {
           0%   { transform: translateY(-60px); opacity: 1; }
