@@ -179,6 +179,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes('failed to fetch') || msg.includes('network')) {
+          return {
+            success: false,
+            error: 'Không kết nối được Supabase. Kiểm tra VITE_SUPABASE_URL / ANON_KEY trong .env hoặc chạy offline (bỏ trống 2 biến này).',
+          };
+        }
         return { success: false, error: error.message };
       }
 

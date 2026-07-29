@@ -70,6 +70,13 @@ export function parseDateString(dateStr: string): Date {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
+export function formatLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
 /**
  * Returns the canonical, deterministic ID for a shift triple. All
  * ScheduleEntry and AttendanceRecord rows that share a triple should
@@ -361,7 +368,7 @@ export function buildShiftsForDate(
   students: Student[],
   scheduleEntries?: ScheduleEntry[]
 ): ScheduleEntry[] {
-  const date = new Date(dateStr + 'T00:00:00');
+  const date = parseDateString(dateStr);
   const vn = getDayOfWeekVN(date);
   if (!vn) return [];
 
@@ -386,8 +393,11 @@ export function buildShiftsForDate(
   const classByKey = new Map<string, ScheduleEntry>();
   for (const cls of fixedClasses) {
     const sessions = getClassSessions(cls).filter((s) => s.dayOfWeek === vn);
+    const enrolledIds = students
+      .filter((s) => s.enrolledClassIds.includes(cls.id))
+      .map((s) => s.id);
     for (const session of sessions) {
-      const shift = buildShiftFromSession(cls, session, []);
+      const shift = buildShiftFromSession(cls, session, enrolledIds);
       const key = buildShiftKey(shift.dayOfWeek, shift.timeSlot, shift.instrument);
       classByKey.set(key, shift);
     }

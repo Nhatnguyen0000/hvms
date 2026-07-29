@@ -4,9 +4,11 @@ import { ActiveTab, Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
 import { LoginScreen } from './components/LoginScreen';
 import { RecordPaymentModal } from './components/RecordPaymentModal';
+import { ReceiptPrintModal } from './components/ReceiptPrintModal';
 import { ToastProvider, ConfirmProvider } from './components/Toast';
 import { Student } from './types';
-import { initSupabaseDataSync, migrateToEncryptedStorage } from './lib/storage';
+import { initSupabaseDataSync, migrateToEncryptedStorage, getPayments, getTuitionTransactions } from './lib/storage';
+import { ReceiptRow, rowFromLegacy, rowFromV2 } from './lib/receiptHelpers';
 
 // Lazy load all views for code splitting
 const DashboardView = lazy(() => import('./components/DashboardView').then(m => ({ default: m.DashboardView })));
@@ -52,6 +54,7 @@ function AuthenticatedApp() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [recordPaymentStudent, setRecordPaymentStudent] = useState<Student | null>(null);
+  const [selectedTxForPrint, setSelectedTxForPrint] = useState<ReceiptRow | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -70,9 +73,16 @@ function AuthenticatedApp() {
     setRecordPaymentStudent(null);
   }, []);
 
-  const handleRecordPaymentSuccess = useCallback(() => {
+  const handleRecordPaymentSuccess = useCallback((newPaymentId: string) => {
     setIsRecordPaymentOpen(false);
     setRecordPaymentStudent(null);
+    const legacyHit = getTuitionTransactions().find((t) => t.id === newPaymentId);
+    const v2Hit = getPayments().find((p) => p.id === newPaymentId);
+    if (v2Hit) {
+      setSelectedTxForPrint(rowFromV2(v2Hit));
+    } else if (legacyHit) {
+      setSelectedTxForPrint(rowFromLegacy(legacyHit));
+    }
   }, []);
 
   const mobileNavSections = useMemo(() => [
@@ -211,7 +221,7 @@ function AuthenticatedApp() {
               <TuitionView onOpenRecordPayment={() => handleOpenRecordPayment(null)} />
             )}
             {activeTab === 'audit' && hasPermission('view_audit') && <AuditLogsView />}
-            {activeTab === 'settings' && hasPermission('view_reports') && <SettingsView />}
+            {activeTab === 'settings' && hasPermission('system_settings') && <SettingsView />}
           </Suspense>
         </main>
       </div>
@@ -248,6 +258,14 @@ function AuthenticatedApp() {
           initialStudent={recordPaymentStudent}
           onClose={handleCloseRecordPayment}
           onSuccess={handleRecordPaymentSuccess}
+        />
+      )}
+
+      {/* Printable Receipt Modal (global Thu Tiền flow) */}
+      {selectedTxForPrint && (
+        <ReceiptPrintModal
+          receipt={selectedTxForPrint}
+          onClose={() => setSelectedTxForPrint(null)}
         />
       )}
     </div>

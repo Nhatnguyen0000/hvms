@@ -8,6 +8,32 @@ export interface SupabaseConfig {
   autoSync: boolean;
 }
 
+const PLACEHOLDER_PATTERNS = [
+  'your-project',
+  'your-anon-key',
+  'mockkey',
+  'placeholder',
+  'example.com',
+];
+
+function isPlaceholderValue(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  if (!lower) return true;
+  return PLACEHOLDER_PATTERNS.some((p) => lower.includes(p));
+}
+
+export function isSupabaseConfigured(config?: SupabaseConfig): boolean {
+  const { url, anonKey } = config ?? getSupabaseConfig();
+  if (!url.trim() || !anonKey.trim()) return false;
+  if (isPlaceholderValue(url) || isPlaceholderValue(anonKey)) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && parsed.hostname.endsWith('.supabase.co');
+  } catch {
+    return false;
+  }
+}
+
 export function getSupabaseConfig(): SupabaseConfig {
   const url = (import.meta as any).env?.VITE_SUPABASE_URL || '';
   const anonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
@@ -27,7 +53,7 @@ let clientInstance: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient | null {
   const config = getSupabaseConfig();
-  if (!config.url || !config.anonKey) {
+  if (!isSupabaseConfigured(config)) {
     return null;
   }
 

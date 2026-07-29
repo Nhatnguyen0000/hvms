@@ -855,14 +855,13 @@ export async function recordPayment(params: {
   // Generate invoice number — month-scoped counter so the printed label stays
   // short and human-readable (BL-YYYY-MM-XXXX) while the chain sequence
   // remains globally unique.
+  const invoiceNumber = nextInvoiceNumber(
+    'BL',
+    sorted.map((t) => t.invoiceNumber)
+  );
   const now = new Date();
   const yearStr = now.getFullYear();
   const monthStr = (now.getMonth() + 1).toString().padStart(2, '0');
-  const monthPrefix = `BL-${yearStr}-${monthStr}-`;
-  const monthCount = sorted.filter((t) => t.invoiceNumber.startsWith(monthPrefix)).length;
-  const seqStr = (monthCount + 1).toString().padStart(4, '0');
-  const invoiceNumber = `${monthPrefix}${seqStr}`;
-
   const paymentDate = `${yearStr}-${monthStr}-${now.getDate().toString().padStart(2, '0')} ${now
     .getHours()
     .toString()
@@ -1117,9 +1116,12 @@ export async function cascadeRehashChain(fromSequenceNumber: number): Promise<Tu
   const transactions = getTuitionTransactions();
   const sorted = [...transactions].sort((a, b) => a.sequenceNumber - b.sequenceNumber);
   const startIdx = sorted.findIndex((t) => t.sequenceNumber >= fromSequenceNumber);
-  if (startIdx <= 0) return sorted;
+  if (startIdx < 0) return sorted;
 
-  let prevHash = sorted[startIdx - 1].integrityHash;
+  let prevHash =
+    startIdx === 0
+      ? '0000000000000000000000000000000000000000000000000000000000000000'
+      : sorted[startIdx - 1].integrityHash;
   const updated: TuitionTransaction[] = [...sorted];
 
   for (let i = startIdx; i < sorted.length; i++) {

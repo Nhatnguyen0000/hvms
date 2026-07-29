@@ -18,6 +18,7 @@ import {
   Instrument,
   getDayOfWeekVN,
   parseDateString,
+  formatLocalDateStr,
   buildSessionName,
   resolveRoster,
   findAttendanceRecord,
@@ -64,11 +65,11 @@ export const AttendanceView: React.FC = () => {
     // Default to today's date if it's a working day, otherwise next Monday.
     const today = new Date();
     if (getDayOfWeekVN(today)) {
-      return today.toISOString().slice(0, 10);
+      return formatLocalDateStr(today);
     }
     const d = new Date(today);
     d.setDate(today.getDate() + ((1 + 7 - today.getDay()) % 7 || 1));
-    return d.toISOString().slice(0, 10);
+    return formatLocalDateStr(d);
   });
 
   // Selected shift triple — drives the roster panel and persists across
@@ -302,15 +303,13 @@ export const AttendanceView: React.FC = () => {
   }, [activeShift, activeShiftEntry, roster, allAttendance, shiftTeacher, selectedDate]);
 
   const handleGoToToday = useCallback(() => {
-    const today = new Date();
-    setSelectedDate(today.toISOString().slice(0, 10));
+    setSelectedDate(formatLocalDateStr(new Date()));
   }, []);
 
   const dateLabel = dayInfo.isWorkingDay ? dayInfo.vn : 'Cuối tuần';
   const headerDayLabel = dayInfo.isWorkingDay ? dateLabel : `Cuối tuần (${selectedDate})`;
   const isToday = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    return selectedDate === today;
+    return selectedDate === formatLocalDateStr(new Date());
   }, [selectedDate]);
 
   return (
@@ -488,6 +487,9 @@ export const AttendanceView: React.FC = () => {
                 shift.dayOfWeek === activeShift.day &&
                 shift.timeSlot === activeShift.slot &&
                 shift.instrument === activeShift.instrument;
+              const displayCount = resolveRoster(shift, allStudents).filter(
+                (s) => s.status === 'Active' || s.status === 'Reserved'
+              ).length;
               return (
                 <button
                   key={shift.id}
@@ -520,7 +522,7 @@ export const AttendanceView: React.FC = () => {
                   </div>
                   <div className="text-xs text-slate-400 mt-1 flex items-center justify-between">
                     <span>
-                      Sĩ số: <strong className="text-amber-300">{shift.studentIds.length} HV</strong>
+                      Sĩ số: <strong className="text-amber-300">{displayCount} HV</strong>
                     </span>
                     {isToday && (
                       <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
